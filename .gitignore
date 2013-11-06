@@ -1,0 +1,16 @@
+project/boot/
+project/plugins/project/
+project/plugins/target/
+project/target/
+target/
+project/boot/*
+project/plugins/project/*
+project/plugins/target/*
+project/target/*
+target/*
+.project
+.classpath
+.scala_dependencies
+.target/
+.cache
+logs/*
