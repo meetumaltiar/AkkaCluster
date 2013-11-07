@@ -24,9 +24,10 @@ class Worker extends Actor {
 object ClusterClientApp extends App {
   val conf = ConfigFactory.load("client-application.conf")
   val system = ActorSystem("client", conf)
-  
-  val initialContacts = Set(system.actorSelection("akka.tcp://ClusterSystem@127.0.0.1:2551/user/receptionist"))
+  val initialContacts = Set(
+    system.actorSelection("akka.tcp://ClusterSystem@127.0.0.1:2551/user/receptionist"),
+    system.actorSelection("akka.tcp://ClusterSystem@127.0.0.1:2552/user/receptionist"))
   val clusterClient = system.actorOf(ClusterClient.props(initialContacts))
-  Thread.sleep(10000)
-  clusterClient ! ClusterClient.Send("/user/workers", "hello", localAffinity = false)
+  Thread.sleep(3000)
+  clusterClient ! ClusterClient.Send("/user/workers", "hello", localAffinity = true)
 }
