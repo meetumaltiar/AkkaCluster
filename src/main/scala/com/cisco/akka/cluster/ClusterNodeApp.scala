@@ -24,7 +24,9 @@ object ClusterNodeApp extends App {
     val router = system.actorOf(Props[ClusterWorker].withRouter(RoundRobinRouter(nrOfInstances = 4)), "workers")
     val clubbedWorkers = system.actorOf(Props(new ClubbedClusterRouter(router)), "clubbedWorkers")
     Cluster(system)
-    //ClusterReceptionistExtension(system).registerService(clubbedWorkers)
+    val clusterRouterSettings = ClusterRouterSettings(totalInstances = 100, routeesPath = "/user/workers", allowLocalRoutees = true, useRole = Some(role))
+    val clusterAwareWorkerRouter = system.actorOf(Props.empty.withRouter(ClusterRouterConfig(RoundRobinRouter(), clusterRouterSettings)), name = "workerRouter")
+    ClusterReceptionistExtension(system).registerService(clusterAwareWorkerRouter)
   }
 
   /**
@@ -61,20 +63,25 @@ class ClubbedClusterRouter(clusterWorkerRouter: ActorRef) extends Actor {
     case MemberUp(m) => register(m)
   }
 
-  def register(member: Member) = if (member.hasRole("frontend")) context.actorSelection(RootActorPath(member.address) / "user" / "frontend") ! BackendRegistration
+  def register(member: Member) = if (member.hasRole("frontend")) context.actorSelection(RootActorPath(member.address) / "user" / "frontend") ! BackendRegistration("cisco")
 }
 
 class FrontendClusterRouter extends Actor {
-  val cluster = Cluster(context.system)
-  // subscribe to cluster changes, MemberUp
-  override def preStart(): Unit = cluster.subscribe(self, classOf[MemberUp])
-  // re-subscribe when restart
-  override def postStop(): Unit = cluster.unsubscribe(self)
-
+  var actors: List[(ActorRef, String)] = List[(ActorRef, String)]()
   def receive = {
-    case msg =>
+    case msg: String =>
+    case BackendRegistration(company) =>
+      context.watch(sender)
+      List((sender, company))
+    case ClusterMessage(company) => route(company)._1 ! ClusterMessage(company)
+    case Terminated(actor) => //remove from list
+  }
+
+  def route(company: String): (ActorRef, String) = {
+    (actors filter { case (actorRef, comp) => (company == comp) }).head
   }
 }
 
-case object BackendRegistration
+case object Prepare
+case class BackendRegistration(role: String)
 case class ClusterMessage(company: String)
