@@ -84,4 +84,3 @@ class FrontendClusterRouter extends Actor {
 
 case object Prepare
 case class BackendRegistration(role: String)
-case class ClusterMessage(company: String)
