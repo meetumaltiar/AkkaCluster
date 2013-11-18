@@ -14,17 +14,20 @@ object ClusterDialInApp extends App {
       val port = args(0)
       val key = args(1)
       println(s"starting actor system on port $port with key $key")
-      val config = ConfigFactory.parseString(s"akka.remote.netty.tcp.port=${port}").withFallback(ConfigFactory.load())
-      val system = ActorSystem("ClusterSystem", config)
-      val frontend = system.actorOf(Props[FrontEndActor], name = "frontend")
-      val localBackendWorkerRouter = system.actorOf(Props[BackendWorker].withRouter(RoundRobinRouter(nrOfInstances = 16)), "workers")
-      val backendRegisterActor = system.actorOf(Props(new BackendRegisterActor(localBackendWorkerRouter, key)), name = "backend")
-      Cluster(system)
-      val clusterRouterSettings = ClusterRouterSettings(totalInstances = 100, routeesPath = "/user/frontend", allowLocalRoutees = true, useRole = None)
-      val clusterAwareWorkerRouter = system.actorOf(Props.empty.withRouter(ClusterRouterConfig(RoundRobinRouter(), clusterRouterSettings)), name = "frontendRouter")
-      ClusterReceptionistExtension(system).registerService(clusterAwareWorkerRouter)
-
+      start(port, key)
     case _ => println(s"Will not start node as port and role not provided...")
+  }
+
+  def start(port: String, key: String) = {
+    val config = ConfigFactory.parseString(s"akka.remote.netty.tcp.port=${port}").withFallback(ConfigFactory.load())
+    val system = ActorSystem("ClusterSystem", config)
+    val frontend = system.actorOf(Props[FrontEndActor], name = "frontend")
+    val localBackendWorkerRouter = system.actorOf(Props[BackendWorker].withRouter(RoundRobinRouter(nrOfInstances = 16)), "workers")
+    val backendRegisterActor = system.actorOf(Props(new WorkerRegisterActor(localBackendWorkerRouter, key)), name = "backend")
+    Cluster(system)
+    val clusterRouterSettings = ClusterRouterSettings(totalInstances = 100, routeesPath = "/user/frontend", allowLocalRoutees = true, useRole = None)
+    val clusterAwareWorkerRouter = system.actorOf(Props.empty.withRouter(ClusterRouterConfig(RoundRobinRouter(), clusterRouterSettings)), name = "frontendRouter")
+    ClusterReceptionistExtension(system).registerService(clusterAwareWorkerRouter)
   }
 }
 
@@ -68,7 +71,7 @@ class FrontEndActor extends Actor {
   }
 }
 
-class BackendRegisterActor(localBackendWorkerRouter: ActorRef, key: String) extends Actor {
+class WorkerRegisterActor(localBackendWorkerRouter: ActorRef, key: String) extends Actor {
   val cluster = Cluster(context.system)
   var routingKey = key
 
