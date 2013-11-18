@@ -1,7 +1,6 @@
 package com.cisco.akka.cluster
 
 import akka.actor._
-import akka.cluster.Cluster
 import akka.cluster.routing._
 import akka.contrib.pattern._
 import akka.routing._

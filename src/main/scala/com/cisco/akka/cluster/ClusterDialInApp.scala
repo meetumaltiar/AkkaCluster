@@ -4,13 +4,26 @@ import akka.actor._
 import akka.cluster._
 import akka.cluster.ClusterEvent._
 import com.typesafe.config._
+import akka.routing._
+import akka.contrib.pattern._
+import akka.cluster.routing._
 
 object ClusterDialInApp extends App {
   args.length match {
-    case 1 =>
-      val config = ConfigFactory.parseString(s"akka.remote.netty.tcp.port=${args(0)}").withFallback(ConfigFactory.load())
+    case 2 =>
+      val port = args(0)
+      val key = args(1)
+      println(s"starting actor system on port $port with key $key")
+      val config = ConfigFactory.parseString(s"akka.remote.netty.tcp.port=${port}").withFallback(ConfigFactory.load())
       val system = ActorSystem("ClusterSystem", config)
       val frontend = system.actorOf(Props[FrontEndActor], name = "frontend")
+      val localBackendWorkerRouter = system.actorOf(Props[ClusterWorker].withRouter(RoundRobinRouter(nrOfInstances = 16)), "workers")
+      val backendRegisterActor = system.actorOf(Props(new BackendRegisterActor(localBackendWorkerRouter, key)), name = "backend")
+      Cluster(system)
+      val clusterRouterSettings = ClusterRouterSettings(totalInstances = 100, routeesPath = "/user/frontend", allowLocalRoutees = true, useRole = None)
+      val clusterAwareWorkerRouter = system.actorOf(Props.empty.withRouter(ClusterRouterConfig(RoundRobinRouter(), clusterRouterSettings)), name = "frontendRouter")
+      ClusterReceptionistExtension(system).registerService(clusterAwareWorkerRouter)
+
     case _ => println(s"Will not start node as port and role not provided...")
   }
 
@@ -21,6 +34,7 @@ class FrontEndActor extends Actor {
   def receive = {
     case message: ClusterMessage => sendMessage(message)
     case BackendRegistration(routingKey) =>
+      println(s"backend registraion request arrived from sender: $sender for key $routingKey")
       actors = (sender, routingKey) :: actors
       context.watch(sender)
     case Terminated(terminatedActor) =>
