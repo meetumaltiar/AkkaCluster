@@ -17,7 +17,7 @@ object ClusterDialInApp extends App {
       val config = ConfigFactory.parseString(s"akka.remote.netty.tcp.port=${port}").withFallback(ConfigFactory.load())
       val system = ActorSystem("ClusterSystem", config)
       val frontend = system.actorOf(Props[FrontEndActor], name = "frontend")
-      val localBackendWorkerRouter = system.actorOf(Props[ClusterWorker].withRouter(RoundRobinRouter(nrOfInstances = 16)), "workers")
+      val localBackendWorkerRouter = system.actorOf(Props[BackendWorker].withRouter(RoundRobinRouter(nrOfInstances = 16)), "workers")
       val backendRegisterActor = system.actorOf(Props(new BackendRegisterActor(localBackendWorkerRouter, key)), name = "backend")
       Cluster(system)
       val clusterRouterSettings = ClusterRouterSettings(totalInstances = 100, routeesPath = "/user/frontend", allowLocalRoutees = true, useRole = None)
@@ -26,7 +26,28 @@ object ClusterDialInApp extends App {
 
     case _ => println(s"Will not start node as port and role not provided...")
   }
+}
 
+object ClusterDialInAppClient extends App {
+  var clusterClient: ActorRef = _
+  args.length match {
+    case 1 =>
+      val key = args(0)
+      println(s"The client will send the Cluster message with key: $key")
+      val conf = ConfigFactory.load("client-application.conf")
+      val system = ActorSystem("client", conf)
+      val initialContacts = Set(system.actorSelection("akka.tcp://ClusterSystem@127.0.0.1:2551/user/receptionist"))
+      clusterClient = system.actorOf(ClusterClient.props(initialContacts))
+      Thread.sleep(5000)
+      (1 to 100000) map { i => send(key) }
+    case _ =>
+  }
+
+  def send(key: String) = {
+    Thread.sleep(500)
+    println("sending")
+    clusterClient ! ClusterClient.Send("/user/frontendRouter", ClusterMessage(key), localAffinity = true)
+  }
 }
 
 class FrontEndActor extends Actor {
@@ -70,3 +91,4 @@ class BackendWorker extends Actor {
 }
 
 case class ClusterMessage(company: String)
+case class BackendRegistration(key: String) 
